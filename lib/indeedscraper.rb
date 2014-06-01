@@ -4,30 +4,48 @@ require 'nokogiri'
 require 'date'
 
 class IndeedScraper
-  def initialize(searchterm)
+  def initialize(searchterm, location)
     @searchterm = searchterm
+    @location = location
     @output = Array.new
-    # Add location specification
-    # Specify if company or resume
   end
 
   # Get all results
-  def search
-    url = "http://www.indeed.com/resumes/" + @searchterm
-    html = Nokogiri::HTML(open(url))
-    results = html.css("ol#results")
-    results.css("li").each do |l|
-      getResume("http://indeed.com"+l.css("a")[0]["href"].gsub("?sp=0",""))
+  def searchResumes
+    @searchterm.gsub!(" ", "-")
+    if @location != nil
+      @location.gsub!(", ", "-")
+      @location.gsub!(" ", "-")
+      url = "http://www.indeed.com/resumes/" + @searchterm + "/in-" + @location
+    else
+      url = "http://www.indeed.com/resumes/" + @searchterm
     end
+    html = Nokogiri::HTML(open(url))
     
     # Handle multiple pages
-    # Add locations
-    # Add jobs
+    numresults = html.css("div#result_count").text.split(" ")
+    fresult = numresults[0].to_i/50.0
+    if fresult != numresults[0].to_i/50
+      count = fresult +1
+    else
+      count = numresults[0].to_i/50
+    end
+    
+    # Loop through pages and get results
+    i = 1
+    while i <= count
+      results = html.css("ol#results")
+      results.css("li").each do |l|
+        getResume("http://indeed.com"+l.css("a")[0]["href"].gsub("?sp=0",""))
+      end
+      i += 1
+      nextstart = (i-1)*50
+      html = Nokogiri::HTML(open(url+"?start="+nextstart.to_s))
+    end
   end
 
   # Process and save resume data
   def getResume(url)
-    #begin
     page = Nokogiri::HTML(open(url))
     name = page.css('h1[itemprop="name"]').text
     location = page.css('p.locality').text
@@ -42,18 +60,18 @@ class IndeedScraper
       positionhash[:name] = name
       positionhash[:url] = url
       positionhash[:title] = w.css("p.work_title").text
-      positionhash[:company] = w.css("div.work_company").css("span")[0].text
+      if w.css("div.work_company").css("span")[0]
+        positionhash[:company] = w.css("div.work_company").css("span")[0].text
+      end
       if w.css("div.work_company").css("span")[1]
         positionhash[:company_location] = w.css("div.work_company").css("span")[1].text
       end
 
       # Process date info
-      daterange = w.css("p.work_dates").text.split(" to ")
-      positionhash[:start_date] = DateTime.parse(dateCheck(daterange[0]))
-      if daterange[1] == "Present"
-        positionhash[:end_date] = "Present"
-      else
-        positionhash[:end_date] = DateTime.parse(dateCheck(daterange[1]))
+      dates = dateParse(w.css("p.work_dates"))
+      if dates
+        positionhash[:start_date] = dates[0]
+        positionhash[:end_date] = dates[1]
       end
 
       positionhash[:description] =  w.css("p.work_description").text
@@ -87,13 +105,52 @@ class IndeedScraper
 
     # Get military service info
     page.css("div.military-section").each do |m|
-      puts m
+      milhash = Hash.new
+      milhash[:name] = name
+      milhash[:url] = url
+      milhash[:service_country] = m.css("p.military_country").text.gsub("Service Country: ", "") 
+      milhash[:branch] = m.css("p.military_branch").text.gsub("Branch: ", "")
+      milhash[:rank] = m.css("p.military_rank").text.gsub("Rank: ", "")
+    
+      # Parse dates                                                                                                     
+      dates = dateParse(m.css("p.military_date"))
+      milhash[:start_date] = dates[0]
+      milhash[:end_date] = dates[1]
+
+      milhash[:military_description] = m.css("p.military_description").text
+      milhash[:military_commendations] = m.css("p.military_commendations").text.split("\n")
+
+      # Info for all items
+      milhash[:skills] = skills
+      milhash[:current_location] = location
+      milhash[:current_title] = currtitle
+      milhash[:summary] = summary
+      milhash[:additional_info] = additionalinfo
+      @output.push(milhash)
     end
-      # Add military service section
-      
-    #rescue
-     # puts url
-    #end
+  end
+
+  # Process dates
+  def dateParse(date)
+    datearray = Array.new
+    daterange = date.text.split(" to ")
+    if daterange[0] != nil
+      datearray[0] = DateTime.parse(dateCheck(daterange[0]))
+    else
+      datearray[0] = nil
+    end
+    
+    if daterange[1] == "Present"
+      datearray[1] = "Present"
+    else
+      if daterange[1] != nil
+        datearray[1] = DateTime.parse(dateCheck(daterange[1]))
+      else
+        datearray = nil
+      end
+    end
+
+    return datearray
   end
 
   # Handle year only dates
@@ -105,7 +162,7 @@ class IndeedScraper
     end
   end
 
-  def getlisting
+  def searchJobs
     # Save company/job name
     # Save location
     # Save url
@@ -119,5 +176,4 @@ class IndeedScraper
     JSON.pretty_generate(@output)
   end
 end
-
 
