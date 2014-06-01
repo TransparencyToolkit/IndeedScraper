@@ -1,0 +1,11 @@
+This is a scraper for jobs and resumes on indeed.com. To use, you can install the indeedscraper gem and require it in a script.
+
+Scrape Resumes-
+i = IndeedScraper.new("keyword", "location (or nil if no location)")
+i.searchResumes
+puts i.getOutput
+
+Scrape Jobs-
+i = IndeedScraper.new("keyword", "location (or nil if no location)")
+i.searchJobs
+puts i.getOutput
