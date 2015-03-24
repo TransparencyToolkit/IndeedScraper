@@ -7,19 +7,19 @@ import (
   "io/ioutil"
 	"strings"
 	"strconv"
+  "time"
   //"reflect"
 	"encoding/json"
   "github.com/moovweb/gokogiri"
   "github.com/moovweb/gokogiri/xml"
 )
 
-// Parse and save profiles
-// Refactor add all
-// Output in JSON (clean up formatting)
-// Add timestamp
-
+//TODO: 
 // Call externally (input opts), mult files, package
 // Add concurrency (in parsing and pages?)
+
+// Parse and save profiles
+// Output in JSON (MarshalIndent?)
 
 // Add same for job listing
 
@@ -28,7 +28,7 @@ var overall []map[string]string
 func main(){
   // Generate search URL
   searchterm := cleanString("golang")
-  location := cleanString("Boston, MA")
+  location := cleanString("")
   url := "http://indeed.com/resumes?"
 
   // Add search term to URL
@@ -51,10 +51,10 @@ func main(){
 
   // Loop through all pages
   for i := 0; i < numPages; i++ {
-    //getResults(url + "&start="+strconv.Itoa(i*50))
+    getResults(url + "&start="+strconv.Itoa(i*50))
   }
   
-  parseProfile("http://www.indeed.com/r/Marilyn-Schlitz/2c0daadc5fb24f45")
+  //parseProfile("http://www.indeed.com/r/Nolan-Knight/c56382c1cfeddd01")
   out, _ := json.Marshal(overall)
   fmt.Println(string(out))
 }
@@ -109,7 +109,8 @@ func parseProfile(url string) {
   personvals["name"] = checkVal(name)
 	
   personvals["url"] = url
-  personvals["fulltext"] = string(body)
+  personvals["time_scraped"] = time.Now().Format(time.RFC850)
+  //personvals["fulltext"] = string(body)
 	
   location, _ := doc.Search("//p[@id='headline_location']")
   personvals["location"] = checkVal(location)
@@ -126,25 +127,60 @@ func parseProfile(url string) {
   additional_info, _ := doc.Search("//div[@id='additionalinfo-section']//p")
   personvals["additional_info"] = checkVal(additional_info)
 
-	//out, _ := json.Marshal(personvals)
-	//fmt.Println(string(out))
+  // Get all awards person received
+  awardslice := make([]map[string]string, 100)
+  awards, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' award-section ')]")
+  for _, award := range(awards){
+    awardvals := make(map[string]string)
+
+    award_title, _ := award.Search(".//p[@class='award_title']")
+    awardvals["award_title"] = checkVal(award_title)
+
+    award_date, _ := award.Search(".//p[@class='award_date']")
+    awardvals["award_date"] = checkVal(award_date)
+
+    award_description, _ := award.Search(".//p[@class='award_description']")
+    awardvals["award_description"] = checkVal(award_description)
+
+    awardslice = append(awardslice, awardvals)
+    // Push to awardvals
+    // Push to overall award hash (part of personvals)
+    //fmt.Println(awardvals["award_description"])
+  }
+  //fmt.Println(awardslice)
+  //personvals["awards"] = string(awardslice)
+
+  // TODO
+  // Add awards
+  // Add certifications
+  // Fix date parsing to handle months
+  // Fix last vs non-last classes
+  // Finish military parser
+  // Just append military and education to jobs?
+
+
   // Work history
-	//jobs, _ := doc.Search("//div[@class='work-experience-section ']")
-	//data, _ := jobs[0].Search("//div[@class='data_display']")
-	//for _, job := range(jobs) {       
-  //job_title, _ := job.Search("//p[@class='work_title title']")
- // company, _ := doc.Search("//div[@class='work_company']")
-  //fmt.Println(company)
-	//for i, _ := range(job_title){
-	//reflect.TypeOf(data)
-	//fmt.Println(data)
-  //}
-	//}
-	// Company
-	// Job title
-	// Years (start and end- maybe parsing)
-	// Company Location
-	// Job Description
+	jobs, _ := doc.Search("//div[@class='work-experience-section ']")
+	for _, job := range(jobs) {
+    jobvals := make(map[string]string)
+    
+    job_title, _ := job.Search(".//p[@class='work_title title']")
+    jobvals["job_title"] = checkVal(job_title)
+
+    company, _ := job.Search(".//div[@class='work_company']//span")
+    jobvals["company"] = checkVal(company)
+
+    company_location, _ := job.Search(".//div[@class='work_company']//div[@class='inline-block']//span")
+    jobvals["company_location"] = checkVal(company_location)
+
+    job_description, _ := job.Search(".//p[@class='work_description']")
+    jobvals["job_description"] = checkVal(job_description)
+
+    job_dates, _ := job.Search(".//p[@class='work_dates']")
+    jobvals["start_date"], jobvals["end_date"] = parseDates(checkVal(job_dates))
+    
+    addPersonVals(personvals, jobvals)
+	}
 
   // Education info
   degrees, _ := doc.Search("//div[@itemtype='http://schema.org/EducationalOrganization']")
@@ -163,14 +199,24 @@ func parseProfile(url string) {
     degree_dates, _ := degree.Search(".//p[@class='edu_dates']")
     degreevals["start_date"], degreevals["end_date"] = parseDates(checkVal(degree_dates))
 
-    // Add vals that are the same everywhere for person
-    for key, val := range(personvals) {
-      degreevals[key] = val
-    }
-    overall = append(overall, degreevals)
+    addPersonVals(personvals, degreevals)
   }
   
   // Military service info
+  //milservice, _ := doc.Search("//div[@id='military-items']//div[@class='data_display']")
+  //for _, mil := range(milservice){
+    // Finish adding
+    //fmt.Println(mil)
+  //}
+}
+
+// Adds the values that are the same for all items
+func addPersonVals(personvals map[string]string, itemvals map[string]string){
+  for key, val := range(personvals) {
+    itemvals[key] = val
+  }
+  
+  overall = append(overall, itemvals)
 }
 
 // Handles date parsing
@@ -179,9 +225,9 @@ func parseDates(dates string) (string, string){
   start_date := ""
   end_date := ""
   
-  if len(split) == 4 {
+  if len(split) >= 3 {
     start_date = split[0]
-    end_date = split[3]
+    end_date = split[len(split)-1]
   } else {
     start_date = dates
     end_date = dates
