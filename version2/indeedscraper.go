@@ -15,11 +15,10 @@ import (
 )
 
 //TODO: 
-// Call externally (input opts), mult files, package
+// Call externally (input opts, return vals), mult files, package
 // Add concurrency (in parsing and pages?)
 
 // Parse and save profiles
-// Output in JSON (MarshalIndent?)
 
 // Add same for job listing
 
@@ -51,12 +50,12 @@ func main(){
 
   // Loop through all pages
   for i := 0; i < numPages; i++ {
-    getResults(url + "&start="+strconv.Itoa(i*50))
+    //getResults(url + "&start="+strconv.Itoa(i*50))
   }
   
-  //parseProfile("http://www.indeed.com/r/Nolan-Knight/c56382c1cfeddd01")
-  out, _ := json.Marshal(overall)
-  fmt.Println(string(out))
+  parseProfile("http://www.indeed.com/r/Nolan-Knight/c56382c1cfeddd01")
+  //out, _ := json.MarshalIndent(overall, "", "    ")
+  //fmt.Println(string(out))
 }
 
 // Gets the results for a single page
@@ -79,7 +78,7 @@ func getPageCount(firstpage []uint8) int {
 	parsed, _ := gokogiri.ParseHtml(firstpage)
 	numresults, _ := parsed.Search("//div[@id='result_count']")
 	num, _ := strconv.Atoi(strings.Split(numresults[0].InnerHtml(), " ")[1])
-
+  
 	numpages := num/50
 	if num % 50 != 0 {
 	  numpages += 1
@@ -128,9 +127,9 @@ func parseProfile(url string) {
   personvals["additional_info"] = checkVal(additional_info)
 
   // Get all awards person received
-  awardslice := make([]map[string]string, 100)
   awards, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' award-section ')]")
-  for _, award := range(awards){
+  awardslice := make([]map[string]string, len(awards))
+  for n, award := range(awards){
     awardvals := make(map[string]string)
 
     award_title, _ := award.Search(".//p[@class='award_title']")
@@ -141,26 +140,45 @@ func parseProfile(url string) {
 
     award_description, _ := award.Search(".//p[@class='award_description']")
     awardvals["award_description"] = checkVal(award_description)
-
-    awardslice = append(awardslice, awardvals)
-    // Push to awardvals
-    // Push to overall award hash (part of personvals)
-    //fmt.Println(awardvals["award_description"])
+    
+    awardslice[n] = awardvals
   }
-  //fmt.Println(awardslice)
-  //personvals["awards"] = string(awardslice)
+  awardlist, _ := json.Marshal(awardslice)
+  personvals["awards"] = string(awardlist)
+
+  // Military service info
+  milservice, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' military-section ')]")
+  milslice := make([]map[string]string, len(milservice))
+  for n, mil := range(milservice){
+    milvals := make(map[string]string)
+
+    military_country, _ := mil.Search(".//p[@class='military_country']")
+    milvals["military_country"] = strings.Split(checkVal(military_country), "</span>")[1]
+
+    military_branch, _ := mil.Search(".//p[@class='military_branch']")
+    milvals["military_branch"] = strings.Split(checkVal(military_branch), "</span>")[1]
+
+    military_rank, _ := mil.Search(".//p[@class='military_rank']")
+    milvals["military_rank"] = strings.Split(checkVal(military_rank), "</span>")[1]
+
+    military_description, _ := mil.Search(".//p[@class='military_description']")
+    milvals["military_description"] = checkVal(military_description)
+
+    military_date, _ := mil.Search(".//p[@class='military_date']")
+    milvals["military_start_date"], milvals["military_end_date"] = parseDates(checkVal(military_date))
+
+    milslice[n] = milvals
+  }
+  millist, _ := json.Marshal(milslice)
+  personvals["military_service"] = string(millist)
 
   // TODO
-  // Add awards
   // Add certifications
-  // Fix date parsing to handle months
-  // Fix last vs non-last classes
-  // Finish military parser
-  // Just append military and education to jobs?
+  // Move edu section to jobs, unique keys for edu section, readd fulltext
 
 
   // Work history
-	jobs, _ := doc.Search("//div[@class='work-experience-section ']")
+	jobs, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' work-experience-section ')]")
 	for _, job := range(jobs) {
     jobvals := make(map[string]string)
     
@@ -201,13 +219,6 @@ func parseProfile(url string) {
 
     addPersonVals(personvals, degreevals)
   }
-  
-  // Military service info
-  //milservice, _ := doc.Search("//div[@id='military-items']//div[@class='data_display']")
-  //for _, mil := range(milservice){
-    // Finish adding
-    //fmt.Println(mil)
-  //}
 }
 
 // Adds the values that are the same for all items
@@ -221,17 +232,23 @@ func addPersonVals(personvals map[string]string, itemvals map[string]string){
 
 // Handles date parsing
 func parseDates(dates string) (string, string){
-  split := strings.Split(dates, " ")
-  start_date := ""
-  end_date := ""
-  
-  if len(split) >= 3 {
+  var start_date string
+  var end_date string
+
+  // Deal with different date formats
+  if strings.Contains(dates, "bis") {
+    split := strings.Split(dates, " bis ")
     start_date = split[0]
-    end_date = split[len(split)-1]
+    end_date = split[1]
+  } else if strings.Contains(dates, " to "){
+    split := strings.Split(dates, " to ")
+    start_date = split[0]
+    end_date = split[1]
   } else {
     start_date = dates
     end_date = dates
   }
+
   return start_date, end_date
 }
 
