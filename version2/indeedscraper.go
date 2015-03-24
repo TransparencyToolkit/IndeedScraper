@@ -8,7 +8,6 @@ import (
 	"strings"
 	"strconv"
   "time"
-  //"reflect"
 	"encoding/json"
   "github.com/moovweb/gokogiri"
   "github.com/moovweb/gokogiri/xml"
@@ -17,8 +16,7 @@ import (
 //TODO: 
 // Call externally (input opts, return vals), mult files, package
 // Add concurrency (in parsing and pages?)
-
-// Parse and save profiles
+// Interface for certifications, awards, education, military, groups, links as two-level json
 
 // Add same for job listing
 
@@ -50,12 +48,11 @@ func main(){
 
   // Loop through all pages
   for i := 0; i < numPages; i++ {
-    //getResults(url + "&start="+strconv.Itoa(i*50))
+    getResults(url + "&start="+strconv.Itoa(i*50))
   }
   
-  parseProfile("http://www.indeed.com/r/Nolan-Knight/c56382c1cfeddd01")
-  //out, _ := json.MarshalIndent(overall, "", "    ")
-  //fmt.Println(string(out))
+  out, _ := json.MarshalIndent(overall, "", "    ")
+  fmt.Println(string(out))
 }
 
 // Gets the results for a single page
@@ -109,7 +106,7 @@ func parseProfile(url string) {
 	
   personvals["url"] = url
   personvals["time_scraped"] = time.Now().Format(time.RFC850)
-  //personvals["fulltext"] = string(body)
+  personvals["fulltext"] = string(body)
 	
   location, _ := doc.Search("//p[@id='headline_location']")
   personvals["location"] = checkVal(location)
@@ -125,6 +122,22 @@ func parseProfile(url string) {
 	
   additional_info, _ := doc.Search("//div[@id='additionalinfo-section']//p")
   personvals["additional_info"] = checkVal(additional_info)
+
+  links, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' link-section ')]")
+  linkslice := make([]map[string]string, len(links))
+  for n, link := range(links){
+    linkvals := make(map[string]string)
+    
+    link_title, _ := link.Search(".//a")
+    linkvals["link_title"] = checkVal(link_title)
+
+    link_url, _ := link.Search(".//a")
+    linkvals["link_url"] = link_url[0].Attr("href")
+    
+    linkslice[n] = linkvals
+  }
+  linklist, _ := json.Marshal(linkslice)
+  personvals["links"] = string(linklist)
 
   // Get all awards person received
   awards, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' award-section ')]")
@@ -146,6 +159,46 @@ func parseProfile(url string) {
   awardlist, _ := json.Marshal(awardslice)
   personvals["awards"] = string(awardlist)
 
+  // Get all groups
+  groups, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' group-section ')]")
+  groupslice := make([]map[string]string, len(groups))
+  for n, group := range(groups){
+    groupvals := make(map[string]string)
+
+    group_title, _ := group.Search(".//p[@class='group_title']")
+    groupvals["group_title"] = checkVal(group_title)
+
+    group_date, _ := group.Search(".//p[@class='group_date']")
+    groupvals["group_start_date"], groupvals["group_end_date"] = parseDates(checkVal(group_date))
+
+    group_description, _ := group.Search(".//p[@class='group_description']")
+    groupvals["group_description"] = checkVal(group_description)
+
+    groupslice[n] = groupvals
+  }
+  grouplist, _ := json.Marshal(groupslice)
+  personvals["groups"] = string(grouplist)
+
+  // Get all certifications
+  certifications, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' certification-section ')]")
+  certificationslice := make([]map[string]string, len(certifications))
+  for n, certification := range(certifications){
+    certvals := make(map[string]string)
+
+    cert_title, _ := certification.Search(".//p[@class='certification_title']")
+    certvals["cert_title"] = checkVal(cert_title)
+
+    cert_date, _ := certification.Search(".//p[@class='certification_date']")
+    certvals["cert_start_date"], certvals["cert_end_date"] = parseDates(checkVal(cert_date))
+
+    cert_description, _ := certification.Search(".//p[@class='certification_description']")
+    certvals["cert_description"] = checkVal(cert_description)
+
+    certificationslice[n] = certvals
+  }
+  certlist, _ := json.Marshal(certificationslice)
+  personvals["certifications"] = string(certlist)
+
   // Military service info
   milservice, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' military-section ')]")
   milslice := make([]map[string]string, len(milservice))
@@ -164,6 +217,9 @@ func parseProfile(url string) {
     military_description, _ := mil.Search(".//p[@class='military_description']")
     milvals["military_description"] = checkVal(military_description)
 
+    military_commendations, _ := mil.Search(".//p[@class='military_commendations']")
+    milvals["military_commendations"] = checkVal(military_commendations)
+
     military_date, _ := mil.Search(".//p[@class='military_date']")
     milvals["military_start_date"], milvals["military_end_date"] = parseDates(checkVal(military_date))
 
@@ -172,10 +228,28 @@ func parseProfile(url string) {
   millist, _ := json.Marshal(milslice)
   personvals["military_service"] = string(millist)
 
-  // TODO
-  // Add certifications
-  // Move edu section to jobs, unique keys for edu section, readd fulltext
+  // Education info
+  degrees, _ := doc.Search("//div[@itemtype='http://schema.org/EducationalOrganization']")
+  degreeslice := make([]map[string]string, len(degrees))
+  for n, degree := range(degrees){
+    degreevals := make(map[string]string)
 
+    school, _ := degree.Search(".//span[@itemprop='name']")
+    degreevals["school"] = checkVal(school)
+
+    degree_title, _ := degree.Search(".//p[@class='edu_title']")
+    degreevals["degree_title"] = checkVal(degree_title)
+
+    school_location, _ := degree.Search(".//span[@itemprop='addressLocality']")
+    degreevals["school_location"] = checkVal(school_location)
+
+    degree_dates, _ := degree.Search(".//p[@class='edu_dates']")
+    degreevals["degree_start_date"], degreevals["degree_end_date"] = parseDates(checkVal(degree_dates))
+
+    degreeslice[n] = degreevals
+  }
+  degreelist, _ := json.Marshal(degreeslice)
+  personvals["degrees"] = string(degreelist)
 
   // Work history
 	jobs, _ := doc.Search("//div[contains(concat(' ',normalize-space(@class),' '),' work-experience-section ')]")
@@ -199,26 +273,6 @@ func parseProfile(url string) {
     
     addPersonVals(personvals, jobvals)
 	}
-
-  // Education info
-  degrees, _ := doc.Search("//div[@itemtype='http://schema.org/EducationalOrganization']")
-  for _, degree := range(degrees){
-    degreevals := make(map[string]string)
-    
-    school, _ := degree.Search(".//span[@itemprop='name']")
-    degreevals["school"] = checkVal(school)
-
-    degree_title, _ := degree.Search(".//p[@class='edu_title']")
-    degreevals["degree_title"] = checkVal(degree_title)
-
-    school_location, _ := degree.Search(".//span[@itemprop='addressLocality']")
-    degreevals["school_location"] = checkVal(school_location)
-
-    degree_dates, _ := degree.Search(".//p[@class='edu_dates']")
-    degreevals["start_date"], degreevals["end_date"] = parseDates(checkVal(degree_dates))
-
-    addPersonVals(personvals, degreevals)
-  }
 }
 
 // Adds the values that are the same for all items
