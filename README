@@ -1,11 +1,10 @@
-This is a scraper for jobs and resumes on indeed.com. To use, you can install the indeedscraper gem and require it in a script.
+This is a scraper for jobs and resumes on indeed.com.
+
+Import-
+1. Make sure you have golang installed
+2. In a terminal run go get "github.com/transparencytoolkit/indeedscraper"
+3. import "github.com/transparencytoolkit/indeedscraper"
 
 Scrape Resumes-
-i = IndeedScraper.new("keyword", "location (or nil if no location)")
-i.searchResumes
-puts i.getOutput
+indeedscraper.GetResumes("search term", "location")
 
-Scrape Jobs-
-i = IndeedScraper.new("keyword", "location (or nil if no location)")
-i.searchJobs
-puts i.getOutput
