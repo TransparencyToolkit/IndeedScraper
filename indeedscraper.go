@@ -20,8 +20,8 @@ var overall []map[string]string
 // Download all the resumes
 func GetResumes(searchterm string, location string) string {
   // Generate search URL
-  searchterm = cleanString("golang")
-  location = cleanString("")
+  searchterm = cleanString(searchterm)
+  location = cleanString(location)
   url := "http://indeed.com/resumes?"
 
   // Add search term to URL
