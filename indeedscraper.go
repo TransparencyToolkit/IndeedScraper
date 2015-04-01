@@ -11,11 +11,9 @@ import (
 )
 
 //TODO:
-// Interface for certifications, awards, education, military, groups, links as two-level json
-// Script to run (like li one)
-
 // Add concurrency (in parsing and pages?)
 // Add same for job listing
+// Clean up result names/types
 
 var overall []map[string]string
 
