@@ -43,8 +43,10 @@ func GetResumes(searchterm string, location string) string {
   numPages := getPageCount(body)
 
   // Loop through all pages
-  for i := 0; i < numPages; i++ {
-    getResults(url + "&start="+strconv.Itoa(i*50))
+  if numPages != 0 {
+    for i := 0; i < numPages; i++ {
+      getResults(url + "&start="+strconv.Itoa(i*50))
+    }
   }
 
   out, _ := json.MarshalIndent(overall, "", "    ")
