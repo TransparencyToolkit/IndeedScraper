@@ -72,14 +72,16 @@ func getResults(resultsurl string) {
 func getPageCount(firstpage []uint8) int {
 	parsed, _ := gokogiri.ParseHtml(firstpage)
 	numresults, _ := parsed.Search("//div[@id='result_count']")
-	num, err := strconv.Atoi(strings.Split(numresults[0].InnerHtml(), " ")[1])
-
-  var numpages int
-  if err == nil {
-    numpages := num/50
-    if num % 50 != 0 {
-      numpages += 1
-    }
+  resultnums := strings.Split(numresults[0].InnerHtml(), " ")
+  
+  var num int
+  if len(resultnums) >= 2 {
+    num, _ = strconv.Atoi(resultnums[1])
+  }
+  
+  numpages := num/50
+  if num % 50 != 0 {
+    numpages += 1
   }
   
 	return numpages
